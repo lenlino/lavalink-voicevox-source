@@ -24,3 +24,10 @@ server:
   max-http-request-header-size: 20MB
 ```
 
+## 参考
+以下を参考に作成しました。
+
+- https://github.com/DuncteBot/tts-plugin
+- https://github.com/topi314/LavaSrc
+- https://github.com/DuncteBot/skybot-lavalink-plugin
+
