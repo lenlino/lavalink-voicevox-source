@@ -14,11 +14,14 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import io.micrometer.common.lang.Nullable;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -83,18 +86,17 @@ public class VVSourceManager implements AudioSourceManager {
             final URIBuilder parsed = new URIBuilder(uri);
             final URI builtUri = parsed.build();
             final List<NameValuePair> queryParams = parsed.getQueryParams();
-            final VVConfig config = new VVConfig(null, null, null);
+            final VVConfig config = new VVConfig(null, null, null, null);
 
             if (!queryParams.isEmpty()) {
-                if (queryParams.stream().anyMatch((p) -> "json".equals(p.getName()))) {
+                if (queryParams.stream().anyMatch((p) -> "text".equals(p.getName()))) {
                     final NameValuePair jsonConfig = queryParams.stream()
                         .filter(
-                            (p) -> "json".equals(p.getName())
+                            (p) -> "text".equals(p.getName())
                         )
                         .findFirst()
                         .orElse(null);
-
-                    config.json = jsonConfig.getValue();
+                    config.text = jsonConfig.getValue();
                 }
 
                 // parse predefined query params
@@ -119,6 +121,18 @@ public class VVSourceManager implements AudioSourceManager {
                         .orElse(null);
 
                     config.address = jsonConfig.getValue();
+
+                }
+
+                if (queryParams.stream().anyMatch((p) -> "query-address".equals(p.getName()))) {
+                    final NameValuePair jsonConfig = queryParams.stream()
+                        .filter(
+                            (p) -> "query-address".equals(p.getName())
+                        )
+                        .findFirst()
+                        .orElse(null);
+
+                    config.queryAddress = jsonConfig == null?config.address:jsonConfig.getValue();
 
                 }
             }
