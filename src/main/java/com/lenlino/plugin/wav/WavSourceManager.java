@@ -36,7 +36,7 @@ public class WavSourceManager implements AudioSourceManager {
     @Override
     public AudioItem loadItem(AudioPlayerManager audioPlayerManager, AudioReference audioReference) {
 
-        byte[] bytes = hexStringToByteArray(audioReference.identifier.replace("wav:", ""));
+        byte[] bytes = Base64.getUrlDecoder().decode(audioReference.identifier.replace("wav:", ""));
 
         UUID uuid = UUID.randomUUID();
         wavConfigMap.put(uuid, bytes);
