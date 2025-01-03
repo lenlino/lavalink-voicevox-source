@@ -40,13 +40,13 @@ public class VVTrack extends DelegatedAudioTrack {
         final VVConfig config = this.sourceManager.parseURI(this.trackInfo.identifier);
 
         if (config == null) {
-            return;
+            throw new FriendlyException("Invalid URI", FriendlyException.Severity.COMMON, null);
         }
 
         final byte[] audio = getAudio(config);
 
         if (audio == null) {
-            return;
+            throw new FriendlyException("Could not generate audio", FriendlyException.Severity.COMMON, null);
         }
         // use NonSeekableInputStream + ByteBufferInputStream/ByteArrayInputStream?
         // make a custom impl of SeekableInputStream with ByteArrayInputStream?
