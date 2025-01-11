@@ -23,10 +23,14 @@ import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class WavSourceManager implements AudioSourceManager {
     private final Map<UUID, byte[]> wavConfigMap = new HashMap<>();
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
     @Override
     public String getSourceName() {
@@ -40,6 +44,11 @@ public class WavSourceManager implements AudioSourceManager {
 
         UUID uuid = UUID.randomUUID();
         wavConfigMap.put(uuid, bytes);
+
+        // 5分後に削除
+        executor.schedule(() -> {
+            wavConfigMap.remove(uuid);
+        }, 5, TimeUnit.MINUTES);
 
         return new WavTrack(new AudioTrackInfo("wav",
             "wav", Units.CONTENT_LENGTH_UNKNOWN, uuid.toString(), false,
