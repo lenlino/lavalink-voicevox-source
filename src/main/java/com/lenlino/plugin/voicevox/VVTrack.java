@@ -25,6 +25,7 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Base64;
 
 public class VVTrack extends DelegatedAudioTrack {
@@ -46,7 +47,12 @@ public class VVTrack extends DelegatedAudioTrack {
         final byte[] audio = getAudio(config);
 
         if (audio == null) {
-            throw new FriendlyException("Could not generate audio", FriendlyException.Severity.COMMON, null);
+            throw new FriendlyException("Could not generate audio NULL " + config.address + " " + config.text + " " + config.speaker, FriendlyException.Severity.COMMON, null);
+        }
+
+        if (!isWavFormat(audio)) {
+            throw new FriendlyException("Invalid audio format " + config.address + " " + config.text + " " + config.speaker
+                + " " + Arrays.toString(audio), FriendlyException.Severity.COMMON, null);
         }
         // use NonSeekableInputStream + ByteBufferInputStream/ByteArrayInputStream?
         // make a custom impl of SeekableInputStream with ByteArrayInputStream?
@@ -57,47 +63,71 @@ public class VVTrack extends DelegatedAudioTrack {
         }
     }
 
+    private boolean isWavFormat(byte[] audioData) {
+        if (audioData.length < 12) {
+            return false; // サイズ不足
+        }
+        // RIFFヘッダーかどうかを確認
+        return audioData[0] == 'R' && audioData[1] == 'I' && audioData[2] == 'F' && audioData[3] == 'F'
+            && audioData[8] == 'W' && audioData[9] == 'A' && audioData[10] == 'V' && audioData[11] == 'E';
+    }
+
     @Nullable
     private byte[] getAudio(VVConfig config) throws UnsupportedEncodingException {
-        int timeout = 5000; // 5秒
-        RequestConfig timeout_config = RequestConfig.custom()
-            .setConnectTimeout(timeout)
-            .setConnectionRequestTimeout(timeout)
-            .setSocketTimeout(timeout)
-            .build();
         HttpPost reqGet = new HttpPost("http://" + config.queryAddress + "/audio_query?text=" +
             URLEncoder.encode(config.text, StandardCharsets.UTF_8) + "&speaker=" + config.speaker);
-        reqGet.setConfig(timeout_config);
         String resultJson = null;
         try (final CloseableHttpResponse response = this.sourceManager.getHttpInterface().execute(reqGet)) {
             if (response.getStatusLine().getStatusCode() != 200) {
-                return null;
+                return failedGetAudio(config);
+            }
+
+            System.out.println(Arrays.asList(response.getHeaders("Content-Type")));
+            if (response.getHeaders("Content-Type").length != 0 &&
+                Arrays.asList(response.getHeaders("Content-Type")).get(0).getValue().equals("audio/wav")) {
+                return response.getEntity().getContent().readAllBytes();
             }
 
             resultJson = EntityUtils.toString(response.getEntity());
         } catch (IOException e) {
-            throw new FriendlyException("Could not generate audio", FriendlyException.Severity.COMMON, e);
+            byte[] audio = failedGetAudio(config);
+            if (audio != null) {
+                return audio;
+            }
+            throw new FriendlyException("Could not generate query"+config.queryAddress+ " " + config.speaker + " " + config.text, FriendlyException.Severity.COMMON, e);
         }
 
         if (resultJson == null) {
-            return null;
+            return failedGetAudio(config);
         }
 
         HttpPost req = new HttpPost("http://"+ config.address + "/synthesis?speaker=" + config.speaker);
-        req.setConfig(timeout_config);
 
         req.setEntity(new StringEntity(resultJson, ContentType.APPLICATION_JSON));
 
         try (final CloseableHttpResponse response = this.sourceManager.getHttpInterface().execute(req)) {
             if (response.getStatusLine().getStatusCode() != 200) {
-                return null;
+                return failedGetAudio(config);
             }
-
             return response.getEntity().getContent().readAllBytes();
         } catch (IOException e) {
-            throw new FriendlyException("Could not generate audio", FriendlyException.Severity.COMMON, e);
+            byte[] audio = failedGetAudio(config);
+            if (audio != null) {
+                return audio;
+            }
+            throw new FriendlyException("Could not generate synthesis "+config.address+ " " + config.speaker + " " + config.text, FriendlyException.Severity.COMMON, e);
         }
     }
+
+    public byte[] failedGetAudio(VVConfig config) throws UnsupportedEncodingException {
+        if (config.retry > 0) {
+            return getAudio(new VVConfig(config.text, config.speaker, config.address, config.queryAddress, config.retry - 1));
+        } else if (this.sourceManager.backupIp != null && !this.sourceManager.backupIp.equals(config.address)) {
+            return getAudio(new VVConfig(config.text, "3", this.sourceManager.backupIp, config.queryAddress, config.retry));
+        }
+        return null;
+    }
+
 
     @Override
     protected AudioTrack makeShallowClone() {

@@ -38,7 +38,7 @@ public class WavTrack extends DelegatedAudioTrack {
 
         byte[] bytes = this.sourceManager.popWavBytes(uuid);
         if (bytes == null) {
-            throw new FriendlyException("Could not generate audio", FriendlyException.Severity.COMMON, null);
+            throw new FriendlyException("Could not generate wav audio ", FriendlyException.Severity.COMMON, null);
         }
 
         try (NonSeekableInputStream stream = new NonSeekableInputStream(new ByteArrayInputStream(bytes))) {

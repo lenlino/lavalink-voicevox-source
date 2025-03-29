@@ -1,5 +1,6 @@
 package com.lenlino.plugin.voicevox;
 
+import com.lenlino.plugin.LavalinkVVConfig;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
@@ -21,22 +22,45 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+// VVSourceManager.java
 @Service
 public class VVSourceManager implements AudioSourceManager {
+    private final HttpInterfaceManager httpInterfaceManager;
+    private static final Logger log = LoggerFactory.getLogger(VVSourceManager.class);
+    public String backupIp = null;
 
-    private final HttpInterfaceManager httpInterfaceManager = HttpClientTools.createDefaultThreadLocalManager();
+    public VVSourceManager(LavalinkVVConfig config) {
+        if (config.getBackupIp() != null) {
+            log.info("Using backup ip: " + config.getBackupIp());
+            backupIp = config.getBackupIp();
+        }
+        httpInterfaceManager = HttpClientTools.createDefaultThreadLocalManager();
+        httpInterfaceManager.configureBuilder(builder -> {
+            builder.setMaxConnPerRoute(5);
+        });
+        httpInterfaceManager.configureRequests(requestConfig -> {
+            return RequestConfig.custom().setConnectTimeout(5000).setConnectionRequestTimeout(5000).setSocketTimeout(5000).setCookieSpec("ignoreCookies").build();
+        });
+    }
 
     @Override
     public String getSourceName() {
@@ -73,7 +97,11 @@ public class VVSourceManager implements AudioSourceManager {
 
     @Override
     public void shutdown() {
-
+        try {
+            this.httpInterfaceManager.close();
+        } catch (IOException e) {
+            log.error("Failed to close HTTP interface manager", e);
+        }
     }
 
     @Nullable
@@ -99,7 +127,6 @@ public class VVSourceManager implements AudioSourceManager {
                     config.text = jsonConfig.getValue();
                 }
 
-                // parse predefined query params
                 if (queryParams.stream().anyMatch((p) -> "speaker".equals(p.getName()))) {
                     final NameValuePair jsonConfig = queryParams.stream()
                         .filter(
@@ -107,9 +134,7 @@ public class VVSourceManager implements AudioSourceManager {
                         )
                         .findFirst()
                         .orElse(null);
-
                     config.speaker = jsonConfig.getValue();
-
                 }
 
                 if (queryParams.stream().anyMatch((p) -> "address".equals(p.getName()))) {
@@ -119,9 +144,7 @@ public class VVSourceManager implements AudioSourceManager {
                         )
                         .findFirst()
                         .orElse(null);
-
                     config.address = jsonConfig.getValue();
-
                 }
 
                 if (queryParams.stream().anyMatch((p) -> "query-address".equals(p.getName()))) {
@@ -131,15 +154,23 @@ public class VVSourceManager implements AudioSourceManager {
                         )
                         .findFirst()
                         .orElse(null);
+                    config.queryAddress = jsonConfig == null ? config.address : jsonConfig.getValue();
+                }
 
-                    config.queryAddress = jsonConfig == null?config.address:jsonConfig.getValue();
-
+                if (queryParams.stream().anyMatch((p) -> "retry".equals(p.getName()))) {
+                    final NameValuePair jsonConfig = queryParams.stream()
+                        .filter(
+                            (p) -> "retry".equals(p.getName())
+                        )
+                        .findFirst()
+                        .orElse(null);
+                    config.retry = Integer.parseInt(jsonConfig.getValue());
                 }
             }
 
             return config;
         } catch (URISyntaxException e) {
-            e.printStackTrace();
+            log.error("Failed to get voicevox server", e);
         }
 
         return null;
@@ -148,5 +179,4 @@ public class VVSourceManager implements AudioSourceManager {
     public HttpInterface getHttpInterface() {
         return this.httpInterfaceManager.getInterface();
     }
-    // ...
 }
