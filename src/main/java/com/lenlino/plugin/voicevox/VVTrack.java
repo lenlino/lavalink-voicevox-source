@@ -82,7 +82,6 @@ public class VVTrack extends DelegatedAudioTrack {
                 return failedGetAudio(config);
             }
 
-            System.out.println(Arrays.asList(response.getHeaders("Content-Type")));
             if (response.getHeaders("Content-Type").length != 0 &&
                 Arrays.asList(response.getHeaders("Content-Type")).get(0).getValue().equals("audio/wav")) {
                 return response.getEntity().getContent().readAllBytes();
